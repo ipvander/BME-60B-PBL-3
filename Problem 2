@@ -1,0 +1,47 @@
+% Ian Van Der Linde, Ryan Shabbak, Trevor Holmgren 
+% 12/2/25
+% Problem 2 – 
+
+clear all; close all; clc;
+
+folder = uigetdir(pwd, 'Select folder with DICOM files');
+
+if folder == 0
+    error('No folder selected');
+end
+
+% --- List all DICOM files in the folder ---
+files = dir(fullfile(folder, '*.dcm'));
+
+info = dicominfo(fullfile(folder, files(1).name));
+nFrames = length(files);
+nRows   = info.Rows;
+nCols   = info.Columns;
+nPlanes = info.SamplesPerPixel;
+
+X = repmat(int16(0), [nRows, nCols, nPlanes, nFrames]);
+
+minPixels = repmat(0, [1, nFrames]);
+maxPixels = repmat(0, [1, nFrames]);
+
+for i = 1:nFrames
+    filename = fullfile(folder, files(i).name);
+
+    frame = dicomread(filename);
+    info  = dicominfo(filename);
+
+    X(:,:,1,i) = frame;
+
+    minPixels(i) = min(frame(:));
+    maxPixels(i) = max(frame(:));
+end
+
+b = min(minPixels);
+maxVal = max(maxPixels);
+
+m = 2^16 - 1;               % = 65535 for uint16
+slope = m / (maxVal - b);
+
+Y = imlincomb(slope, X, -(slope * b), 'uint16');
+
+montage(Y);
