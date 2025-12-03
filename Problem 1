@@ -1,0 +1,105 @@
+% Ian Van Der Linde, Ryan Shabbak, Trevor Holmgren 
+% 11/30/25
+% Problem 1 – Create a maximum intensity projection of microglia,
+% filter out the background to create binary image, then apply image as a
+% mask to MIP.
+
+clear; close all; clc;
+
+%1) Load 15 TIFF images in 3D matrix and compute MIP
+numImgs = 15;
+stack = [];
+
+for i = 0:numImgs-1
+    fname = sprintf('microglia/GFP%04d.tif', i); % GFP0000–GFP0014
+    img = imread(fname);
+    stack(:,:,i+1) = img;
+end
+
+MIP = uint8(max(stack, [], 3));
+
+% 2) Display MIP
+figure;
+imagesc(MIP); colormap("gray"); axis image off;
+title('Maximum Intensity Projection (MIP)');
+
+% 3) Show histogram to pick manual threshold
+figure;
+imhist(MIP, 256);
+title('Histogram of MIP Intensities');
+xlabel('Pixel Intensity'); ylabel('Frequency');
+
+fprintf('\nThreshold + Filter Testing\n');
+% 4) Manual threshold
+manualThresh = 100;
+fprintf('\nTesting manual threshold = %d...\n', manualThresh);
+MIP_thresh = MIP >= manualThresh;
+
+% Morphological cleanup
+SE = strel('disk',2);
+MIP_thresh = imopen(MIP_thresh, SE);
+fprintf('Manual thresholding complete.\n');
+
+figure;
+imagesc(MIP_thresh); colormap gray; axis image off;
+title(sprintf('Final Binary Image after Manual Threshold = %d', manualThresh));
+
+% 5. Try Gaussian filter
+fprintf('\nTesting Gaussian filter (sigma=2) with threshold = 100...\n');
+gauss_img = imgaussfilt(MIP, 2);
+figure; imhist(gauss_img, 256); title('Histogram after Gaussian filter');
+gauss_thresh = gauss_img > 100;
+fprintf('Gaussian thresholding complete.\n');
+
+figure; imagesc(gauss_thresh); colormap("gray"); axis image off
+title('Gaussian Filter Binary Mask');
+
+% 6. Try Median filter
+fprintf('\nTesting Median filter (3x3) with threshold = 100...\n');
+med_img = medfilt2(MIP);
+figure; imhist(med_img, 256); title('Histogram after Median filter');
+med_thresh = med_img > 100;
+fprintf('Median thresholding complete.\n');
+
+figure; imagesc(med_thresh); colormap("gray"); axis image off
+title('Median Filter Binary Image');
+
+% 7. Try Guided filter
+fprintf('\nTesting Guided filter (default params) with threshold = 100...\n');
+guided_img = imguidedfilter(MIP);
+figure; imhist(guided_img, 256); title('Histogram after Guided filter');
+guided_thresh = guided_img > 100;
+fprintf('Guided thresholding complete.\n');
+
+figure; imagesc(guided_thresh); colormap("gray"); axis image off
+title('Guided Filter Binary Image');
+
+Thresh_final = MIP_thresh; % Best filter after inspection
+fprintf('\nEnd of Filter/Threshold Testing\n\n');
+% 8) Count blobs > 25 pixels
+labeled = bwlabel(Thresh_final);
+stats = regionprops(labeled, 'Area');
+areas = [stats.Area];
+num_blobs = sum(areas > 25);
+fprintf('Number of blobs with area > 25 pixels: %d\n', num_blobs);
+
+figure;
+imhist(uint8(areas));
+title('Distribution of Blob Sizes');
+
+% Filter out blobs with area < 25 pixels
+bigBlobLabels = find(areas > 25);     % indices of blobs to keep
+binaryImage = ismember(labeled, bigBlobLabels);  % pixel-level mask
+
+% 9) Create masked MIP
+maskedImage = MIP.*uint8(binaryImage);
+
+figure;
+imagesc(maskedImage); colormap gray; axis image off;
+title('Masked Image (Microglia Highlighted)');
+
+% 10) Quantitative processing thoughts
+fprintf(['\nQuantitative Processing Thoughts:\n' ...
+    'Quantitative image processing is useful in finding structures' ...
+    ' that otherwise may be invisible to the naked eye.\n' ...
+    'It is also useful for isolating areas of interest in an image.\n']);
