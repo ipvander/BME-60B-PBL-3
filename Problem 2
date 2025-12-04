@@ -1,47 +1,52 @@
 % Ian Van Der Linde, Ryan Shabbak, Trevor Holmgren 
 % 12/2/25
-% Problem 2 – 
+% Problem 2 – This code loads MRI DICOM slices, normalizes their pixel 
+% values, and displays the full stack as a montage.
 
-clear all; close all; clc;
+clear all; close all; clc; % Clear everything
 
-folder = uigetdir(pwd, 'Select folder with DICOM files');
+% Get a list of all DICOM files in the MRI Images folder
+files = dir('MRI Images/*.dcm'); %Search all .dcm files inside folder
 
-if folder == 0
-    error('No folder selected');
+if isempty(files) %If no files are found
+    error('No DICOM files found!'); %Stop the script with an error message
 end
 
-% --- List all DICOM files in the folder ---
-files = dir(fullfile(folder, '*.dcm'));
+% Read the first file to get metadata
+info = dicominfo(fullfile('MRI Images', ... %Load metadata for first slice
+                          files(1).name));
+nFrames = length(files); % Number of slices in the dataset
+nRows   = info.Rows;    % Image height (number of rows)
+nCols   = info.Columns; % Image width (number of columns)
+nPlanes = info.SamplesPerPixel; % Number of color planes
+% Preallocate
+X = repmat(int16(0), [nRows, nCols, nPlanes, nFrames]); %Create 3D array to store all slices
 
-info = dicominfo(fullfile(folder, files(1).name));
-nFrames = length(files);
-nRows   = info.Rows;
-nCols   = info.Columns;
-nPlanes = info.SamplesPerPixel;
+minPixels = repmat(0, [1, nFrames]); %Vector of each slice's min pixel val
+maxPixels = repmat(0, [1, nFrames]); %Vector of each slice's max pixel val
 
-X = repmat(int16(0), [nRows, nCols, nPlanes, nFrames]);
+for i = 1:nFrames % Loop through all slices
+    fname = fullfile('MRI Images', ... %Generate full path to i-th file
+                     files(i).name);
 
-minPixels = repmat(0, [1, nFrames]);
-maxPixels = repmat(0, [1, nFrames]);
+    frame = dicomread(fname); % Read pixel data from the DICOM file
+    info  = dicominfo(fname); % Read metadata from the same file
 
-for i = 1:nFrames
-    filename = fullfile(folder, files(i).name);
+    X(:,:,1,i) = frame; % Store the slice in the 3D image volume
 
-    frame = dicomread(filename);
-    info  = dicominfo(filename);
-
-    X(:,:,1,i) = frame;
-
-    minPixels(i) = min(frame(:));
-    maxPixels(i) = max(frame(:));
+    minPixels(i) = min(frame(:)); % Store min pixel value for the slice
+    maxPixels(i) = max(frame(:)); % Store max pixel value for the slice
 end
 
-b = min(minPixels);
-maxVal = max(maxPixels);
+% Compute absolute min and max pixel values
+b = min(minPixels); % Absolute min pixel value
+maxVal = max(maxPixels); % Absolute max pixel value
 
-m = 2^16 - 1;               % = 65535 for uint16
-slope = m / (maxVal - b);
+m = 2^16 - 1; % Max intensity for uint16
+slope = m / (maxVal - b); % Scaling factor so data fills full uint16 range
 
-Y = imlincomb(slope, X, -(slope * b), 'uint16');
+% Apply the normalization to entire 3D volume
+Y = imlincomb(slope, X, -(slope * b), ... %Linearly transform pixel values
+              'uint16'); % Output as uint16 image
 
-montage(Y);
+montage(Y); %Display all slices together in a montage
