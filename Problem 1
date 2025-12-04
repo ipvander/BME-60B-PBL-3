@@ -1,105 +1,107 @@
 % Ian Van Der Linde, Ryan Shabbak, Trevor Holmgren 
 % 11/30/25
-% Problem 1 – Create a maximum intensity projection of microglia,
-% filter out the background to create binary image, then apply image as a
-% mask to MIP.
+% Problem 1 – Create a MIP of microglia, threshold it, filter it, and mask it.
 
-clear; close all; clc;
+clear all; close all; clc; % Clear everything
 
-%1) Load 15 TIFF images in 3D matrix and compute MIP
-numImgs = 15;
-stack = [];
+% 1) Load 15 TIFF images and compute the MIP
+numImgs = 15; % Number of TIFF slices
+stack = zeros(1024,1024,15); % Preallocated 3D array for image stack
 
-for i = 0:numImgs-1
-    fname = sprintf('microglia/GFP%04d.tif', i); % GFP0000–GFP0014
-    img = imread(fname);
-    stack(:,:,i+1) = img;
+for i = 0:numImgs-1 % Loop through image indices
+    fname = sprintf('microglia/GFP%04d.tif', i); %Build filename
+    img = imread(fname); % Read image slice
+    stack(:,:,i+1) = img; % Store slice in 3D stack
 end
 
-MIP = uint8(max(stack, [], 3));
+MIP = uint8(max(stack, [], 3)); % Compute Maximum Intensity Projection
 
-% 2) Display MIP
+% 2) Display the MIP
 figure;
-imagesc(MIP); colormap("gray"); axis image off;
+imagesc(MIP); colormap("gray"); axis image off; % Show grayscale MIP
 title('Maximum Intensity Projection (MIP)');
 
-% 3) Show histogram to pick manual threshold
+% 3) Show histogram to choose threshold
 figure;
-imhist(MIP, 256);
+imhist(MIP, 256); % Plot pixel intensity histogram
 title('Histogram of MIP Intensities');
 xlabel('Pixel Intensity'); ylabel('Frequency');
 
 fprintf('\nThreshold + Filter Testing\n');
-% 4) Manual threshold
-manualThresh = 100;
+
+% 4) Manual threshold selection
+manualThresh = 100; % Chosen manual threshold
 fprintf('\nTesting manual threshold = %d...\n', manualThresh);
-MIP_thresh = MIP >= manualThresh;
+MIP_thresh = MIP >= manualThresh; % Convert to binary mask
 
 % Morphological cleanup
-SE = strel('disk',2);
-MIP_thresh = imopen(MIP_thresh, SE);
+SE = strel('disk',2); % Structuring element for cleanup
+MIP_thresh = imopen(MIP_thresh, SE); % Remove small specks/noise
 fprintf('Manual thresholding complete.\n');
 
 figure;
-imagesc(MIP_thresh); colormap gray; axis image off;
+imagesc(MIP_thresh); colormap gray; axis image off;%Show final binary image
 title(sprintf('Final Binary Image after Manual Threshold = %d', manualThresh));
 
-% 5. Try Gaussian filter
+% 5. Gaussian filter test
 fprintf('\nTesting Gaussian filter (sigma=2) with threshold = 100...\n');
-gauss_img = imgaussfilt(MIP, 2);
-figure; imhist(gauss_img, 256); title('Histogram after Gaussian filter');
-gauss_thresh = gauss_img > 100;
+gauss_img = imgaussfilt(MIP, 2); % Apply Gaussian smoothing
+figure; imhist(gauss_img, 256); % Show histogram
+title('Histogram after Gaussian filter');
+gauss_thresh = gauss_img > 100; % Threshold result
 fprintf('Gaussian thresholding complete.\n');
 
 figure; imagesc(gauss_thresh); colormap("gray"); axis image off
 title('Gaussian Filter Binary Mask');
 
-% 6. Try Median filter
+% 6. Median filter test
 fprintf('\nTesting Median filter (3x3) with threshold = 100...\n');
-med_img = medfilt2(MIP);
-figure; imhist(med_img, 256); title('Histogram after Median filter');
-med_thresh = med_img > 100;
+med_img = medfilt2(MIP); % Apply median filtering
+figure; imhist(med_img, 256); % Show histogram
+title('Histogram after Median filter');
+med_thresh = med_img > 100; % Threshold result
 fprintf('Median thresholding complete.\n');
 
 figure; imagesc(med_thresh); colormap("gray"); axis image off
 title('Median Filter Binary Image');
 
-% 7. Try Guided filter
+% 7. Guided filter test
 fprintf('\nTesting Guided filter (default params) with threshold = 100...\n');
-guided_img = imguidedfilter(MIP);
-figure; imhist(guided_img, 256); title('Histogram after Guided filter');
-guided_thresh = guided_img > 100;
+guided_img = imguidedfilter(MIP); % Apply edge-preserving filter
+figure; imhist(guided_img, 256); % Show histogram
+title('Histogram after Guided filter');
+guided_thresh = guided_img > 100; % Threshold result
 fprintf('Guided thresholding complete.\n');
 
 figure; imagesc(guided_thresh); colormap("gray"); axis image off
 title('Guided Filter Binary Image');
 
-Thresh_final = MIP_thresh; % Best filter after inspection
+Thresh_final = MIP_thresh; % Choose best mask manually
 fprintf('\nEnd of Filter/Threshold Testing\n\n');
-% 8) Count blobs > 25 pixels
-labeled = bwlabel(Thresh_final);
-stats = regionprops(labeled, 'Area');
-areas = [stats.Area];
-num_blobs = sum(areas > 25);
+
+% 8) Count blobs larger than 25 pixels
+labeled = bwlabel(Thresh_final); % Label blobs
+stats = regionprops(labeled, 'Area'); % Measure blob areas
+areas = [stats.Area]; % Extract areas to array
+num_blobs = sum(areas > 25); % Count blobs above threshold
 fprintf('Number of blobs with area > 25 pixels: %d\n', num_blobs);
 
 figure;
-imhist(uint8(areas));
+imhist(uint8(areas)); % Histogram of blob sizes
 title('Distribution of Blob Sizes');
 
-% Filter out blobs with area < 25 pixels
-bigBlobLabels = find(areas > 25);     % indices of blobs to keep
-binaryImage = ismember(labeled, bigBlobLabels);  % pixel-level mask
+% Filter out blobs smaller than 25 pixels
+bigBlobLabels = find(areas > 25); % Keep only large blobs
+binaryImage = ismember(labeled, bigBlobLabels);% Create mask of valid blobs
 
 % 9) Create masked MIP
-maskedImage = MIP.*uint8(binaryImage);
+maskedImage = MIP .* uint8(binaryImage); % Apply mask to MIP
 
 figure;
-imagesc(maskedImage); colormap gray; axis image off;
+imagesc(maskedImage); colormap gray; axis image off; % Display masked MIP
 title('Masked Image (Microglia Highlighted)');
 
-% 10) Quantitative processing thoughts
+% 10) Notes about quantitative processing
 fprintf(['\nQuantitative Processing Thoughts:\n' ...
-    'Quantitative image processing is useful in finding structures' ...
-    ' that otherwise may be invisible to the naked eye.\n' ...
-    'It is also useful for isolating areas of interest in an image.\n']);
+    'Quantitative image processing helps detect subtle structures.\n' ...
+    'It also isolates regions of interest for analysis.\n']);
