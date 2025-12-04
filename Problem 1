@@ -41,7 +41,7 @@ fprintf('Manual thresholding complete.\n');
 
 figure;
 imagesc(MIP_thresh); colormap gray; axis image off;%Show final binary image
-title(sprintf('Final Binary Image after Manual Threshold = %d', manualThresh));
+title(sprintf('Chosen Binary Image after Manual Threshold = %d', manualThresh));
 
 % 5. Gaussian filter test
 fprintf('\nTesting Gaussian filter (sigma=2) with threshold = 100...\n');
